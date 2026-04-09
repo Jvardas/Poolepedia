@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Release artifacts (created by packager locally)
+/release/
+*.zip
+
+# Fetched external libs — don't commit these
+/libs/
