@@ -6,7 +6,7 @@
 ## RequiredDeps:
 ## OptionalDeps: Blizzard_Minimap
 ## X-Curse-Project-ID: 999999
-## SavedVariables: PoolepediaSettings PoolepediaCatches, PoolepediaCharClasses
+## SavedVariables: PoolepediaSettings PoolepediaCatches, PoolepediaCharClasses, PoolepediaMinimapButtonPOS
 ## SavedVariablesPerCharacter:
 
 ## X-License: MIT

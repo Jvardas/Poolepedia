@@ -67,86 +67,10 @@ closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 2, 2)
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
 -- ============================================================
--- Tabs  – custom top tabs with active underline indicator
--- ============================================================
-local tabs      = {}
-local activeTab = nil
-
-local function SetTabActive(btn)
-    if activeTab then
-        activeTab._indicator:Hide()
-        activeTab._lbl:SetTextColor(0.55, 0.55, 0.60)
-        activeTab._bg:SetVertexColor(1, 1, 1, 0)
-        activeTab._active = false
-    end
-    activeTab        = btn
-    btn._active      = true
-    btn._indicator:Show()
-    btn._lbl:SetTextColor(0.95, 0.90, 0.65)
-end
-
-local function MakeTopTab(label, n)
-    local btn = CreateFrame("Button", nil, header)
-    btn:SetSize(110, HEADER_H)
-
-    local bg = btn:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetTexture("Interface\\Buttons\\WHITE8X8")
-    bg:SetVertexColor(1, 1, 1, 0)
-    btn._bg = bg
-
-    local indicator = btn:CreateTexture(nil, "OVERLAY")
-    indicator:SetHeight(2)
-    indicator:SetPoint("BOTTOMLEFT",  btn, "BOTTOMLEFT",  6, 0)
-    indicator:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -6, 0)
-    indicator:SetTexture("Interface\\Buttons\\WHITE8X8")
-    indicator:SetVertexColor(0.55, 0.75, 1, 1)
-    indicator:Hide()
-    btn._indicator = indicator
-
-    local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    lbl:SetAllPoints()
-    lbl:SetText(label)
-    lbl:SetTextColor(0.55, 0.55, 0.60)
-    btn._lbl  = lbl
-    btn._n    = n
-
-    btn:SetScript("OnEnter", function()
-        if not btn._active then bg:SetVertexColor(1, 1, 1, 0.06) end
-    end)
-    btn:SetScript("OnLeave", function()
-        if not btn._active then bg:SetVertexColor(1, 1, 1, 0) end
-    end)
-
-    tabs[n] = btn
-    return btn
-end
-
-local tab1 = MakeTopTab("Catalogue", 1)
-tab1:SetPoint("LEFT", titleText, "RIGHT", 24, 0)
-
-local tab2 = MakeTopTab("Settings", 2)
-tab2:SetPoint("LEFT", tab1, "RIGHT", 0, 0)
-
 -- ── Panes (content area below header) ───────────────────────
 local catPane = CreateFrame("Frame", nil, frame)
 catPane:SetPoint("TOPLEFT",     frame, "TOPLEFT",     8, -(HEADER_H + 6))
 catPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
-
-local settingsPane = CreateFrame("Frame", nil, frame)
-settingsPane:SetPoint("TOPLEFT",     frame, "TOPLEFT",     8, -(HEADER_H + 6))
-settingsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
-settingsPane:Hide()
-
-local function SwitchTab(n)
-    catPane:SetShown(n == 1)
-    settingsPane:SetShown(n == 2)
-    SetTabActive(tabs[n])
-end
-
-tab1:SetScript("OnClick", function() SwitchTab(1) end)
-tab2:SetScript("OnClick", function() SwitchTab(2) end)
-SwitchTab(1)
 
 -- ============================================================
 -- TAB 1: CATALOGUE
@@ -794,37 +718,24 @@ searchBox:HookScript("OnTextChanged", function(self)
 end)
 
 -- ============================================================
--- TAB 2: SETTINGS
--- ============================================================
-local minimapLbl = settingsPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-minimapLbl:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", 8, -8)
-minimapLbl:SetText("UI Settings:")
-minimapLbl:SetTextColor(0.7, 0.7, 0.7)
-
-local minimapCB = CreateFrame("CheckButton", "PoolepediaCatMinimapCB", settingsPane, "UICheckButtonTemplate")
-minimapCB:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", 8, -28)
-minimapCB:SetScript("OnClick", function(self)
-    if PoolepediaSettings then
-        PoolepediaSettings.hideMinimapButton = not self:GetChecked()
-    end
-    if Poolepedia_RefreshMinimapButton then
-        Poolepedia_RefreshMinimapButton()
-    end
-end)
-minimapCB.text:SetText("Show minimap button")
-
-settingsPane:SetScript("OnShow", function()
-    minimapCB:SetChecked(not (PoolepediaSettings and PoolepediaSettings.hideMinimapButton))
-end)
-
--- ============================================================
 -- Slash Command  /pld  – toggles the catalogue panel
+--                        /pld minimap – re-shows the minimap button
 -- ============================================================
 SLASH_POOLEPEDIA1 = "/pld"
-SlashCmdList["POOLEPEDIA"] = function()
-    if frame:IsShown() then
-        frame:Hide()
+SlashCmdList["POOLEPEDIA"] = function(msg)
+    if msg and msg:lower() == "minimap" then
+        if PoolepediaSettings then
+            PoolepediaSettings.hideMinimapButton = false
+        end
+        if Poolepedia_RefreshMinimapButton then
+            Poolepedia_RefreshMinimapButton()
+        end
+        print("|cFF00CCFFPoolepedia|r: minimap button shown.")
     else
-        frame:Show()
+        if frame:IsShown() then
+            frame:Hide()
+        else
+            frame:Show()
+        end
     end
 end

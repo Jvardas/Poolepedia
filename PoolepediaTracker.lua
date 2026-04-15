@@ -73,6 +73,6 @@ trackerFrame:SetScript("OnEvent", function(self, event)
                 end
             end
         end
+        if Poolepedia_RefreshLiveStats then Poolepedia_RefreshLiveStats() end
     end
-    if Poolepedia_RefreshLiveStats then Poolepedia_RefreshLiveStats() end
 end)
