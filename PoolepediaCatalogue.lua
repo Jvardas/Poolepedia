@@ -4,12 +4,16 @@
 -- Opened via /pld or the minimap button
 -- ============================================================
 
-local FRAME_W = 720
-local FRAME_H = 720
-local LIST_W = 210
-local ROW_H = 22
+local FRAME_W  = 720
+local FRAME_H  = 720
+local LIST_W   = 210
+local ROW_H    = 22
+local HEADER_H = 44   -- top strip height (title + tabs)
 
-local frame = CreateFrame("Frame", "PoolepediaCatalogueFrame", UIParent, "BasicFrameTemplateWithInset")
+-- ============================================================
+-- Main frame  – plain dark panel, no WoW chrome
+-- ============================================================
+local frame = CreateFrame("Frame", "PoolepediaCatalogueFrame", UIParent, "BackdropTemplate")
 frame:SetSize(FRAME_W, FRAME_H)
 frame:SetPoint("CENTER")
 frame:SetMovable(true)
@@ -18,57 +22,204 @@ frame:RegisterForDrag("LeftButton")
 frame:SetScript("OnDragStart", frame.StartMoving)
 frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 frame:SetToplevel(true)
+frame:SetFrameStrata("DIALOG")
 frame:Hide()
 table.insert(UISpecialFrames, "PoolepediaCatalogueFrame")
 
-do
-    local t = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-    t:SetPoint("TOP", frame, "TOP", 0, -3)
-    t:SetText("Poolepedia")
+-- Dark semi-transparent body
+frame:SetBackdrop({
+    bgFile   = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 16,
+    insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+})
+frame:SetBackdropColor(0.04, 0.04, 0.04, 0.82)
+frame:SetBackdropBorderColor(0.22, 0.22, 0.22, 1)
+
+-- ── Header strip ────────────────────────────────────────────
+local header = CreateFrame("Frame", nil, frame)
+header:SetPoint("TOPLEFT",  frame, "TOPLEFT",  0, 0)
+header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+header:SetHeight(HEADER_H)
+
+local headerBg = header:CreateTexture(nil, "BACKGROUND")
+headerBg:SetAllPoints()
+headerBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+headerBg:SetVertexColor(0.06, 0.06, 0.06, 1)
+
+-- Thin separator below header
+local headerLine = header:CreateTexture(nil, "ARTWORK")
+headerLine:SetTexture("Interface\\Buttons\\WHITE8X8")
+headerLine:SetVertexColor(0.22, 0.22, 0.22, 1)
+headerLine:SetHeight(1)
+headerLine:SetPoint("BOTTOMLEFT",  header, "BOTTOMLEFT",  0, 0)
+headerLine:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
+
+-- Title text
+local titleText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+titleText:SetPoint("LEFT", header, "LEFT", 16, 0)
+titleText:SetText("Poolepedia")
+titleText:SetTextColor(0.9, 0.85, 0.65, 1)  -- warm gold
+
+-- Close button
+local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 2, 2)
+closeBtn:SetScript("OnClick", function() frame:Hide() end)
+
+-- ============================================================
+-- Tabs  – custom top tabs with active underline indicator
+-- ============================================================
+local tabs      = {}
+local activeTab = nil
+
+local function SetTabActive(btn)
+    if activeTab then
+        activeTab._indicator:Hide()
+        activeTab._lbl:SetTextColor(0.55, 0.55, 0.60)
+        activeTab._bg:SetVertexColor(1, 1, 1, 0)
+        activeTab._active = false
+    end
+    activeTab        = btn
+    btn._active      = true
+    btn._indicator:Show()
+    btn._lbl:SetTextColor(0.95, 0.90, 0.65)
 end
 
-local function MakeTabBtn(name, label, anchor, anchorTo, anchorPoint, ox, oy)
-    local b = CreateFrame("Button", name, frame, "UIPanelButtonTemplate")
-    b:SetSize(100, 22)
-    b:SetPoint(anchor, anchorTo, anchorPoint, ox, oy)
-    local bg = b:CreateTexture(nil, "BACKGROUND")
+local function MakeTopTab(label, n)
+    local btn = CreateFrame("Button", nil, header)
+    btn:SetSize(110, HEADER_H)
+
+    local bg = btn:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetTexture("Interface\\Buttons\\WHITE8X8")
-    bg:SetVertexColor(0.12, 0.12, 0.12, 0.9)
-    b._bg = bg
-    local txt = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    txt:SetAllPoints()
-    txt:SetText(label)
-    b._txt = txt
-    return b
+    bg:SetVertexColor(1, 1, 1, 0)
+    btn._bg = bg
+
+    local indicator = btn:CreateTexture(nil, "OVERLAY")
+    indicator:SetHeight(2)
+    indicator:SetPoint("BOTTOMLEFT",  btn, "BOTTOMLEFT",  6, 0)
+    indicator:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -6, 0)
+    indicator:SetTexture("Interface\\Buttons\\WHITE8X8")
+    indicator:SetVertexColor(0.55, 0.75, 1, 1)
+    indicator:Hide()
+    btn._indicator = indicator
+
+    local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lbl:SetAllPoints()
+    lbl:SetText(label)
+    lbl:SetTextColor(0.55, 0.55, 0.60)
+    btn._lbl  = lbl
+    btn._n    = n
+
+    btn:SetScript("OnEnter", function()
+        if not btn._active then bg:SetVertexColor(1, 1, 1, 0.06) end
+    end)
+    btn:SetScript("OnLeave", function()
+        if not btn._active then bg:SetVertexColor(1, 1, 1, 0) end
+    end)
+
+    tabs[n] = btn
+    return btn
 end
 
-local tab1 = MakeTabBtn("PoolepediaCatalogueTab1", "Catalogue", "BOTTOMLEFT", frame, "BOTTOMLEFT", 5, -22)
-local tab2 = MakeTabBtn("PoolepediaCatalogueTab2", "Settings", "LEFT", tab1, "RIGHT", 2, 0)
+local tab1 = MakeTopTab("Catalogue", 1)
+tab1:SetPoint("LEFT", titleText, "RIGHT", 24, 0)
 
+local tab2 = MakeTopTab("Settings", 2)
+tab2:SetPoint("LEFT", tab1, "RIGHT", 0, 0)
+
+-- ── Panes (content area below header) ───────────────────────
 local catPane = CreateFrame("Frame", nil, frame)
-catPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -40)
-catPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 24)
+catPane:SetPoint("TOPLEFT",     frame, "TOPLEFT",     8, -(HEADER_H + 6))
+catPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
 
 local settingsPane = CreateFrame("Frame", nil, frame)
-settingsPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -40)
-settingsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 24)
+settingsPane:SetPoint("TOPLEFT",     frame, "TOPLEFT",     8, -(HEADER_H + 6))
+settingsPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
 settingsPane:Hide()
 
 local function SwitchTab(n)
     catPane:SetShown(n == 1)
     settingsPane:SetShown(n == 2)
+    SetTabActive(tabs[n])
 end
+
 tab1:SetScript("OnClick", function() SwitchTab(1) end)
 tab2:SetScript("OnClick", function() SwitchTab(2) end)
 SwitchTab(1)
 
 -- ============================================================
--- TAB 1: CATALOOGUE
+-- TAB 1: CATALOGUE
 -- ============================================================
+
+-- ── Expansion filter dropdown (UIDropDownMenuTemplate) ──────
+local filterDropdown = CreateFrame("Frame", "PoolepediaFilterDropdown", catPane, "UIDropDownMenuTemplate")
+filterDropdown:SetPoint("TOPLEFT", catPane, "TOPLEFT", -15, -4)
+UIDropDownMenu_SetWidth(filterDropdown, LIST_W - 30)
+
+local function UpdateFilterLabel()
+    if not PoolepediaSettings then
+        UIDropDownMenu_SetText(filterDropdown, "All Expansions")
+        return
+    end
+    local allOn, count, last = true, 0, nil
+    for _, exp in ipairs(Poolepedia_EXPANSIONS) do
+        if PoolepediaSettings[exp] ~= false then
+            count = count + 1
+            last  = exp
+        else
+            allOn = false
+        end
+    end
+    if allOn then
+        UIDropDownMenu_SetText(filterDropdown, "All Expansions")
+    elseif count == 1 then
+        UIDropDownMenu_SetText(filterDropdown, last)
+    else
+        UIDropDownMenu_SetText(filterDropdown, "Multiple (" .. count .. ")")
+    end
+end
+
+UIDropDownMenu_Initialize(filterDropdown, function(_, _)
+    local info         = UIDropDownMenu_CreateInfo()
+    info.text          = "All Expansions"
+    info.notCheckable  = true
+    info.func = function()
+        if PoolepediaSettings then
+            for _, exp in ipairs(Poolepedia_EXPANSIONS) do
+                PoolepediaSettings[exp] = true
+            end
+        end
+        UpdateFilterLabel()
+        if Poolepedia_RefreshCatalogueList then Poolepedia_RefreshCatalogueList() end
+    end
+    UIDropDownMenu_AddButton(info)
+
+    for _, exp in ipairs(Poolepedia_EXPANSIONS) do
+        local info2            = UIDropDownMenu_CreateInfo()
+        info2.text             = exp
+        info2.isNotRadio       = true
+        info2.keepShownOnClick = true
+        info2.checked          = not PoolepediaSettings or PoolepediaSettings[exp] ~= false
+        info2.func = function(btn)
+            if PoolepediaSettings then PoolepediaSettings[exp] = btn.checked end
+            UpdateFilterLabel()
+            if Poolepedia_RefreshCatalogueList then Poolepedia_RefreshCatalogueList() end
+        end
+        UIDropDownMenu_AddButton(info2)
+    end
+end)
+
+-- ── Search box ───────────────────────────────────────────────
+local searchBox = CreateFrame("EditBox", "PoolepediaSearchBox", catPane, "SearchBoxTemplate")
+searchBox:SetPoint("TOPLEFT", catPane, "TOPLEFT", 0, -36)
+searchBox:SetSize(LIST_W - 24, 20)
+searchBox:SetAutoFocus(false)
+
+-- ── Left scroll / fish list ─────────────────────────────────
 local leftScroll = CreateFrame("ScrollFrame", nil, catPane, "UIPanelScrollFrameTemplate")
-leftScroll:SetPoint("TOPLEFT", catPane, "TOPLEFT", 0, 0)
-leftScroll:SetPoint("BOTTOMLEFT", catPane, "BOTTOMLEFT", 0, 0)
+leftScroll:SetPoint("TOPLEFT",    searchBox, "BOTTOMLEFT",  0,  -4)
+leftScroll:SetPoint("BOTTOMLEFT", catPane,   "BOTTOMLEFT",  0,   0)
 leftScroll:SetWidth(LIST_W - 24)
 
 local leftList = CreateFrame("Frame", nil, leftScroll)
@@ -80,16 +231,18 @@ leftScroll:SetScript("OnSizeChanged", function(self)
     leftList:SetWidth(self:GetWidth())
 end)
 
+-- ── Vertical divider ────────────────────────────────────────
 local div = catPane:CreateTexture(nil, "ARTWORK")
 div:SetTexture("Interface\\Buttons\\WHITE8X8")
-div:SetVertexColor(0.25, 0.25, 0.25, 1)
+div:SetVertexColor(0.25, 0.25, 0.35, 1)
 div:SetWidth(1)
-div:SetPoint("TOPLEFT", catPane, "TOPLEFT", LIST_W, 0)
+div:SetPoint("TOPLEFT",    catPane, "TOPLEFT",    LIST_W, 0)
 div:SetPoint("BOTTOMLEFT", catPane, "BOTTOMLEFT", LIST_W, 0)
 
+-- ── Right panel ─────────────────────────────────────────────
 local rightFrame = CreateFrame("Frame", nil, catPane)
-rightFrame:SetPoint("TOPLEFT", catPane, "TOPLEFT", LIST_W+8, 0)
-rightFrame:SetPoint("BOTTOMRIGHT", catPane, "BOTTOMRIGHT", 0, 0)
+rightFrame:SetPoint("TOPLEFT",     catPane, "TOPLEFT",     LIST_W + 8, 0)
+rightFrame:SetPoint("BOTTOMRIGHT", catPane, "BOTTOMRIGHT", 0,          0)
 
 local fishHeader = rightFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 fishHeader:SetPoint("TOPLEFT", rightFrame, "TOPLEFT", 6, -4)
@@ -97,8 +250,8 @@ fishHeader:SetJustifyH("LEFT")
 fishHeader:SetText("Select a fish ->")
 
 local rightScroll = CreateFrame("ScrollFrame", nil, rightFrame, "UIPanelScrollFrameTemplate")
-rightScroll:SetPoint("TOPLEFT", rightFrame, "TOPLEFT", 0, -26)
-rightScroll:SetPoint("BOTTOMRIGHT", rightFrame, "BOTTOMRIGHT", -24, 0)
+rightScroll:SetPoint("TOPLEFT",     rightFrame, "TOPLEFT",     0,  -26)
+rightScroll:SetPoint("BOTTOMRIGHT", rightFrame, "BOTTOMRIGHT", -10,   0)
 
 local rightList = CreateFrame("Frame", nil, rightScroll)
 rightList:SetWidth(400)
@@ -109,27 +262,72 @@ rightScroll:SetScript("OnSizeChanged", function(self)
     rightList:SetWidth(self:GetWidth())
 end)
 
--- ============================================
+-- ── Slim scrollbar styling ───────────────────────────────────
+local function StyleScrollBar(scrollFrame)
+    local sb = scrollFrame.ScrollBar
+    if not sb then return end
+
+    sb:SetWidth(6)
+
+    -- Dark track behind the thumb
+    local track = sb:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    track:SetTexture("Interface\\Buttons\\WHITE8X8")
+    track:SetVertexColor(0.08, 0.08, 0.08, 0.85)
+
+    -- Slim, light thumb
+    local thumb = sb.ThumbTexture
+    if thumb then
+        thumb:SetWidth(4)
+        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+        thumb:SetVertexColor(0.45, 0.45, 0.48, 0.90)
+    end
+
+    -- Minimal arrow buttons
+    for _, btn in ipairs({ sb.ScrollUpButton, sb.ScrollDownButton }) do
+        if btn then
+            btn:SetSize(6, 10)
+            for _, getter in ipairs({
+                btn.GetNormalTexture,
+                btn.GetHighlightTexture,
+                btn.GetPushedTexture,
+                btn.GetDisabledTexture,
+            }) do
+                local t = getter and getter(btn)
+                if t then t:SetTexture("") end
+            end
+            local cap = btn:CreateTexture(nil, "ARTWORK")
+            cap:SetAllPoints()
+            cap:SetTexture("Interface\\Buttons\\WHITE8X8")
+            cap:SetVertexColor(0.28, 0.28, 0.30, 0.85)
+        end
+    end
+end
+
+StyleScrollBar(leftScroll)
+StyleScrollBar(rightScroll)
+
+-- ============================================================
 -- Accordion engine
--- ============================================
-local HEADER_H = 26
-local POOL_H = 20
-local STAT_H = 22
-local SUBROW_H = 18
-local allSections = {}
+-- ============================================================
+local ACC_HEADER_H = 26
+local POOL_H       = 20
+local STAT_H       = 22
+local SUBROW_H     = 18
+local allSections  = {}
 
 local function RelayoutAll()
     local y = 0
     for _, sec in ipairs(allSections) do
         sec.hdrFrame:ClearAllPoints()
-        sec.hdrFrame:SetPoint("TOPLEFT", rightList, "TOPLEFT", 0, -y)
+        sec.hdrFrame:SetPoint("TOPLEFT",  rightList, "TOPLEFT",  0, -y)
         sec.hdrFrame:SetPoint("TOPRIGHT", rightList, "TOPRIGHT", 0, -y)
         sec.hdrFrame:Show()
-        y = y + HEADER_H
+        y = y + ACC_HEADER_H
         for _, row in ipairs(sec.rows) do
             if sec.expanded then
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", rightList, "TOPLEFT", 0, -y)
+                row:SetPoint("TOPLEFT",  rightList, "TOPLEFT",  0, -y)
                 row:SetPoint("TOPRIGHT", rightList, "TOPRIGHT", 0, -y)
                 row:Show()
                 y = y + POOL_H
@@ -154,13 +352,13 @@ local function ClearRightPanel()
 end
 
 local function MakeSectionHeader(label, r, g, b)
-   local hdr = CreateFrame("Frame", nil, rightList)
-    hdr:SetHeight(HEADER_H)
+    local hdr = CreateFrame("Frame", nil, rightList)
+    hdr:SetHeight(ACC_HEADER_H)
 
     local hbg = hdr:CreateTexture(nil, "BACKGROUND")
     hbg:SetAllPoints()
     hbg:SetTexture("Interface\\Buttons\\WHITE8X8")
-    hbg:SetVertexColor(0.10, 0.10, 0.10, 0.95)
+    hbg:SetVertexColor(0.08, 0.08, 0.08, 0.95)
 
     local arrow = hdr:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(16, 16)
@@ -168,19 +366,20 @@ local function MakeSectionHeader(label, r, g, b)
     arrow:SetTexture("Interface\\Buttons\\UI-PlusButton-Up")
 
     local lbl = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    lbl:SetPoint("LEFT", hdr, "LEFT", 24, 0)
+    lbl:SetPoint("LEFT",  hdr, "LEFT",  24, 0)
     lbl:SetPoint("RIGHT", hdr, "RIGHT", -4, 0)
     lbl:SetJustifyH("LEFT")
     lbl:SetText(label)
     lbl:SetTextColor(r, g, b)
 
     local sec = { hdrFrame = hdr, rows = {}, expanded = false, arrow = arrow }
-    allSections[#allSections+1] = sec
+    allSections[#allSections + 1] = sec
 
     local function toggle()
         sec.expanded = not sec.expanded
-
-        arrow:SetTexture(sec.expanded and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
+        arrow:SetTexture(sec.expanded
+            and "Interface\\Buttons\\UI-MinusButton-Up"
+            or  "Interface\\Buttons\\UI-PlusButton-Up")
         RelayoutAll()
     end
 
@@ -188,21 +387,21 @@ local function MakeSectionHeader(label, r, g, b)
     hdr:SetScript("OnMouseDown", function(_, btn)
         if btn == "LeftButton" then toggle() end
     end)
-    hdr:SetScript("OnEnter", function() hbg:SetVertexColor(0.18, 0.18, 0.18, 0.95) end)
-    hdr:SetScript("OnLeave", function() hbg:SetVertexColor(0.10, 0.10, 0.10, 0.95) end)
+    hdr:SetScript("OnEnter", function() hbg:SetVertexColor(0.14, 0.14, 0.14, 0.95) end)
+    hdr:SetScript("OnLeave", function() hbg:SetVertexColor(0.08, 0.08, 0.08, 0.95) end)
+
     return sec
 end
 
--- ======================================
+-- ============================================================
 -- Section builders
--- ======================================
+-- ============================================================
 local function BuildMapsSection(fishName)
-    local sec = MakeSectionHeader(" Maps", 1, 0.82, 0) -- gold
+    local sec = MakeSectionHeader(" Maps", 1, 0.82, 0)
 
     local entries = PoolepediaFishIndex and PoolepediaFishIndex[fishName]
     if not entries then
         rightList:SetHeight(1)
-        --ShowFishStats(fishName)
         return
     end
 
@@ -214,12 +413,12 @@ local function BuildMapsSection(fishName)
         local zbg = zrow:CreateTexture(nil, "BACKGROUND")
         zbg:SetAllPoints()
         zbg:SetTexture("Interface\\Buttons\\WHITE8X8")
-        zbg:SetVertexColor(0.14, 0.14, 0.14, 0.85)
-        zrow:SetScript("OnEvent", function() zbg:SetVertexColor(1, 1, 1, 0.07) end)
-        zrow:SetScript("OnLeave", function() zbg:SetVertexColor(1, 1, 1, 0) end)
+        zbg:SetVertexColor(0.12, 0.12, 0.16, 0.85)
+        zrow:SetScript("OnEnter", function() zbg:SetVertexColor(0.18, 0.18, 0.25, 1) end)
+        zrow:SetScript("OnLeave", function() zbg:SetVertexColor(0.12, 0.12, 0.16, 0.85) end)
 
         local zlbl = zrow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        zlbl:SetPoint("LEFT", zrow, "LEFT", 10, 0)
+        zlbl:SetPoint("LEFT",  zrow, "LEFT",   10, 0)
         zlbl:SetPoint("RIGHT", zrow, "RIGHT", -54, 0)
         zlbl:SetJustifyH("LEFT")
         zlbl:SetText("|cFFFFD700" .. e.zoneName .. "|r  |cFF888888- " .. e.poolName .. "|r")
@@ -232,42 +431,40 @@ local function BuildMapsSection(fishName)
         mapBtn:SetScript("OnClick", function() OpenWorldMap(zoneID) end)
 
         zrow:Hide()
-        sec.rows[#sec.rows+1] = zrow
+        sec.rows[#sec.rows + 1] = zrow
     end
 
     return sec
 end
 
-local function BuildRecipesSection(fishName)
-    local sec = MakeSectionHeader(" Recipes", 0, 0.85, 1) -- cyan
+local function BuildRecipesSection(_)
+    local sec = MakeSectionHeader(" Recipes", 0, 0.85, 1)
 
     local placeholder = CreateFrame("Frame", nil, rightList)
     placeholder:SetHeight(STAT_H)
     placeholder._h = STAT_H
 
     local plbl = placeholder:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    plbl:SetPoint("LEFT", placeholder, "LEFT", 14, 0)
-    plbl:SetPoint("RIGHT", placeholder, "RIGHT", -4, 0)
+    plbl:SetPoint("LEFT",  placeholder, "LEFT",   14, 0)
+    plbl:SetPoint("RIGHT", placeholder, "RIGHT",  -4, 0)
     plbl:SetJustifyH("LEFT")
     plbl:SetTextColor(0.5, 0.5, 0.5)
     plbl:SetText("Crafting data not available")
 
     placeholder:Hide()
-    sec.rows[#sec.rows+1] = placeholder
+    sec.rows[#sec.rows + 1] = placeholder
 
     return sec
 end
 
 local function BuildStatsSection(fishName)
-    local sec = MakeSectionHeader(" Lifetime Stats", 0, 0.65, 1) -- blue
-    
-    -- Aggregate lifetime catches across every pool entry for this fish.
-    -- totals[itemName] = { total = N, icon = "...", byChar = { ["Name-Realm"] = N }}
+    local sec = MakeSectionHeader(" Lifetime Stats", 0, 0.65, 1)
+
     local totals = {}
     local entries = PoolepediaFishIndex and PoolepediaFishIndex[fishName]
     if entries then
         for _, e in ipairs(entries) do
-            local key = e.zoneID .. "/" .. e.poolName
+            local key     = e.zoneID .. "/" .. e.poolName
             local catches = PoolepediaCatches and PoolepediaCatches[key]
             if catches then
                 for itemName, catchData in pairs(catches) do
@@ -276,7 +473,6 @@ local function BuildStatsSection(fishName)
                     end
                     local t = totals[itemName]
                     t.total = t.total + (catchData.total or catchData.count or 0)
-                    -- merge per char sub-totals
                     if catchData.byChar then
                         for char, n in pairs(catchData.byChar) do
                             t.byChar[char] = (t.byChar[char] or 0) + n
@@ -288,28 +484,29 @@ local function BuildStatsSection(fishName)
     end
 
     local sorted = {}
-    for n, d in pairs(totals) do sorted[#sorted+1] = { name = n, total = d.total, icon = d.icon, byChar = d.byChar } end
+    for n, d in pairs(totals) do
+        sorted[#sorted + 1] = { name = n, total = d.total, icon = d.icon, byChar = d.byChar }
+    end
     table.sort(sorted, function(a, b) return a.total > b.total end)
 
     if #sorted == 0 then
         local empty = CreateFrame("Frame", nil, rightList)
         empty:SetHeight(STAT_H)
         empty._h = STAT_H
-        
+
         local elbl = empty:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        elbl:SetPoint("LEFT", empty, "LEFT", 14, 0)
-        elbl:SetPoint("RIGHT", empty, "RIGHT", -4, 0)
+        elbl:SetPoint("LEFT",  empty, "LEFT",   14, 0)
+        elbl:SetPoint("RIGHT", empty, "RIGHT",  -4, 0)
         elbl:SetJustifyH("LEFT")
         elbl:SetTextColor(0.5, 0.5, 0.5)
         elbl:SetText("No catches recorded yet")
 
         empty:Hide()
-        sec.rows[#sec.rows+1] = empty
+        sec.rows[#sec.rows + 1] = empty
         return sec
     end
 
     for _, item in ipairs(sorted) do
-        -- Item row
         local row = CreateFrame("Frame", nil, rightList)
         row:SetHeight(STAT_H)
         row._h = STAT_H
@@ -320,7 +517,7 @@ local function BuildStatsSection(fishName)
         if item.icon then iconTex:SetTexture(item.icon) end
 
         local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        lbl:SetPoint("LEFT", row, "LEFT", 30, 0)
+        lbl:SetPoint("LEFT",  row, "LEFT",   30, 0)
         lbl:SetPoint("RIGHT", row, "RIGHT", -60, 0)
         lbl:SetJustifyH("LEFT")
         lbl:SetText(item.name)
@@ -333,47 +530,42 @@ local function BuildStatsSection(fishName)
         row:Hide()
         sec.rows[#sec.rows + 1] = row
 
-        -- Per-character sub-rows (only when >=2 characters have data)
         local charList = {}
         for char, n in pairs(item.byChar) do
-            charList[#charList+1] = { char = char, n = n }
+            charList[#charList + 1] = { char = char, n = n }
         end
         table.sort(charList, function(a, b) return a.n > b.n end)
 
-        if #charList >= 1 then
-            for _, cd in ipairs(charList) do
-                local sub = CreateFrame("Frame", nil, rightList)
-                sub:SetHeight(SUBROW_H)
-                sub._h = SUBROW_H
+        for _, cd in ipairs(charList) do
+            local sub = CreateFrame("Frame", nil, rightList)
+            sub:SetHeight(SUBROW_H)
+            sub._h = SUBROW_H
 
-                local classToken = PoolepediaCharClasses and PoolepediaCharClasses[cd.char]
-                local cr, cg, cb = 0.6, 0.6, 0.6
-                if classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken] then
-                    local c = RAID_CLASS_COLORS[classToken]
-                    if c then
-                        cr, cg, cb = c.r, c.g, c.b
-                    end
-                end
-
-                local subLbl = sub:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                subLbl:SetPoint("LEFT", sub, "LEFT", 34, 0)
-                subLbl:SetPoint("RIGHT", sub, "RIGHT", -60, 0)
-                subLbl:SetJustifyH("LEFT")
-                subLbl:SetTextColor(cr, cg, cb)
-                subLbl:SetText("" .. cd.char)
-
-                local subCnt = sub:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                subCnt:SetPoint("RIGHT", sub, "RIGHT", -4, 0)
-                subCnt:SetJustifyH("RIGHT")
-                subCnt:SetTextColor(0.6, 0.6, 0.6)
-                subCnt:SetText("x" .. cd.n)
-
-                sub:Hide()
-                sec.rows[#sec.rows+1] = sub
+            local classToken = PoolepediaCharClasses and PoolepediaCharClasses[cd.char]
+            local cr, cg, cb_col = 0.6, 0.6, 0.6
+            if classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken] then
+                local c = RAID_CLASS_COLORS[classToken]
+                if c then cr, cg, cb_col = c.r, c.g, c.b end
             end
+
+            local subLbl = sub:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            subLbl:SetPoint("LEFT",  sub, "LEFT",   34, 0)
+            subLbl:SetPoint("RIGHT", sub, "RIGHT", -60, 0)
+            subLbl:SetJustifyH("LEFT")
+            subLbl:SetTextColor(cr, cg, cb_col)
+            subLbl:SetText(cd.char)
+
+            local subCnt = sub:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            subCnt:SetPoint("RIGHT", sub, "RIGHT", -4, 0)
+            subCnt:SetJustifyH("RIGHT")
+            subCnt:SetTextColor(0.6, 0.6, 0.6)
+            subCnt:SetText("x" .. cd.n)
+
+            sub:Hide()
+            sec.rows[#sec.rows + 1] = sub
         end
     end
-    
+
     return sec
 end
 
@@ -383,45 +575,78 @@ local function ShowFishZones(fishName)
     activeCatalogueFish = fishName
     fishHeader:SetText(fishName)
     ClearRightPanel()
-
     BuildMapsSection(fishName)
     BuildRecipesSection(fishName)
     BuildStatsSection(fishName)
-
     RelayoutAll()
 end
 
 Poolepedia_RefreshLiveStats = function()
     if activeCatalogueFish then ShowFishZones(activeCatalogueFish) end
+    if Poolepedia_RefreshCatalogueList then Poolepedia_RefreshCatalogueList() end
 end
 
--- Fish list buttons ------------------------------------------------------
+-- ── Fish list buttons ────────────────────────────────────────
 local fishButtons = {}
-local activeBtn = nil
+local activeBtn   = nil
 
 local function DeactivateAll()
     for _, b in ipairs(fishButtons) do
-        b._bg:SetVertexColor(1, 1, 1, 0)
+        if b._caught then
+            b._bg:SetVertexColor(1, 0.82, 0, 0.18)
+        else
+            b._bg:SetVertexColor(1, 1, 1, 0)
+        end
     end
     activeBtn = nil
 end
 
 local function RefreshFishColors()
     for _, btn in ipairs(fishButtons) do
-        local exp
         local entries = PoolepediaFishIndex and PoolepediaFishIndex[btn._name]
-        if entries and entries[1] then
-            local pd = PoolepediaDB and PoolepediaDB._byName[entries[1].poolName]
-            exp = pd and pd.expansion
+        local enabled = false
+        if entries then
+            for _, e in ipairs(entries) do
+                local pd  = PoolepediaDB and PoolepediaDB._byName[e.poolName]
+                local exp = pd and pd.expansion
+                -- no expansion data, or the expansion is enabled → show
+                if not exp or not PoolepediaSettings or PoolepediaSettings[exp] ~= false then
+                    enabled = true
+                    break
+                end
+            end
+        else
+            enabled = true  -- unknown fish, show by default
         end
-        local enabled = not exp
-            or not PoolepediaSettings
-            or PoolepediaSettings[exp] ~= false
-        local r = enabled and 1 or 0.38
-        btn._lbl:SetTextColor(r, r, r)
-        if btn._icon then btn._icon:SetAlpha(enabled and 1 or 0.38) end
+
+        -- Re-evaluate caught status (catches may arrive after build)
+        if not btn._caught and PoolepediaFishIndex and PoolepediaFishIndex[btn._name] then
+            for _, e in ipairs(PoolepediaFishIndex[btn._name]) do
+                local key = e.zoneID .. "/" .. e.poolName
+                if PoolepediaCatches and PoolepediaCatches[key]
+                    and next(PoolepediaCatches[key]) then
+                    btn._caught = true
+                    break
+                end
+            end
+        end
+
         if btn == activeBtn then
             btn._bg:SetVertexColor(0.2, 0.55, 1, 0.30)
+            btn._lbl:SetTextColor(1, 1, 1)
+            if btn._icon then btn._icon:SetAlpha(1) end
+        elseif not enabled then
+            btn._bg:SetVertexColor(1, 1, 1, 0)
+            btn._lbl:SetTextColor(0.38, 0.38, 0.38)
+            if btn._icon then btn._icon:SetAlpha(0.38) end
+        elseif btn._caught then
+            btn._bg:SetVertexColor(1, 0.82, 0, 0.18)   -- gold background tint
+            btn._lbl:SetTextColor(1, 0.85, 0.1)        -- gold text
+            if btn._icon then btn._icon:SetAlpha(1) end
+        else
+            btn._bg:SetVertexColor(1, 1, 1, 0)
+            btn._lbl:SetTextColor(1, 1, 1)
+            if btn._icon then btn._icon:SetAlpha(1) end
         end
     end
 end
@@ -433,16 +658,14 @@ local function BuildFishList()
     if not PoolepediaFishIndex then return end
 
     local names = {}
-    for n in pairs(PoolepediaFishIndex) do
-        names[#names+1] = n
-    end
+    for n in pairs(PoolepediaFishIndex) do names[#names + 1] = n end
     table.sort(names)
 
     local y = 0
     for _, name in ipairs(names) do
         local btn = CreateFrame("Button", nil, leftList)
         btn:SetHeight(ROW_H)
-        btn:SetPoint("TOPLEFT", leftList, "TOPLEFT", 2, -y)
+        btn:SetPoint("TOPLEFT",  leftList, "TOPLEFT",   2, -y)
         btn:SetPoint("TOPRIGHT", leftList, "TOPRIGHT", -2, -y)
 
         local bg = btn:CreateTexture(nil, "BACKGROUND")
@@ -461,48 +684,70 @@ local function BuildFishList()
         end
 
         local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        lbl:SetPoint("LEFT", btn, "LEFT", 24, 0)
-        lbl:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
+        lbl:SetPoint("LEFT",  btn, "LEFT",   24, 0)
+        lbl:SetPoint("RIGHT", btn, "RIGHT",  -2, 0)
         lbl:SetJustifyH("LEFT")
         lbl:SetText(name)
 
-        btn._name = name
-        btn._bg = bg
-        btn._lbl = lbl
-        btn._icon = iconTex
+        -- Check if this fish has any recorded catches (has real icon data)
+        local hasCatch = tex ~= nil
+        if not hasCatch and PoolepediaFishIndex and PoolepediaFishIndex[name] then
+            for _, e in ipairs(PoolepediaFishIndex[name]) do
+                local key = e.zoneID .. "/" .. e.poolName
+                if PoolepediaCatches and PoolepediaCatches[key]
+                    and next(PoolepediaCatches[key]) then
+                    hasCatch = true
+                    break
+                end
+            end
+        end
 
-        btn:SetScript("OnEnter", function (self)
-            if self ~= activeBtn then bg:SetVertexColor(1, 1, 1, 0.88) end
+        btn._name    = name
+        btn._bg      = bg
+        btn._lbl     = lbl
+        btn._icon    = iconTex
+        btn._caught  = hasCatch
+
+        btn:SetScript("OnEnter", function(self)
+            if self ~= activeBtn then
+                if self._caught then
+                    bg:SetVertexColor(1, 0.82, 0, 0.30)
+                else
+                    bg:SetVertexColor(1, 1, 1, 0.08)
+                end
+            end
         end)
-        btn:SetScript("OnLeave", function (self)
-            if self ~= activeBtn then bg:SetVertexColor(1, 1, 1, 0) end
+        btn:SetScript("OnLeave", function(self)
+            if self ~= activeBtn then
+                if self._caught then
+                    bg:SetVertexColor(1, 0.82, 0, 0.18)
+                else
+                    bg:SetVertexColor(1, 1, 1, 0)
+                end
+            end
         end)
-        btn:SetScript("OnClick", function (self)
+        btn:SetScript("OnClick", function(self)
             DeactivateAll()
             activeBtn = self
-            bg:SetVertexColor(0.2, 0.55, 1, 0.38)
+            bg:SetVertexColor(0.2, 0.55, 1, 0.30)
             ShowFishZones(name)
         end)
 
-        fishButtons[#fishButtons+1] = btn
+        fishButtons[#fishButtons + 1] = btn
         y = y + ROW_H
     end
     leftList:SetHeight(math.max(y, 1))
     fishListBuilt = true
 end
 
-local iconByName = {}
 local iconFillFrame = CreateFrame("Frame")
 iconFillFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-iconFillFrame:SetScript("OnEvent", function(_, _, itemID, success)
-    if not success then return end
-    if not fishListBuilt then return end
+iconFillFrame:SetScript("OnEvent", function(_, _, _, success)
+    if not success or not fishListBuilt then return end
     for _, btn in ipairs(fishButtons) do
         if not btn._icon then
             local _, _, _, _, _, _, _, _, _, tex = C_Item.GetItemInfo(btn._name)
-            if tex then
-                btn._icon:SetTexture(tex)
-            end
+            if tex then btn._icon:SetTexture(tex) end
         end
     end
 end)
@@ -510,118 +755,54 @@ end)
 catPane:SetScript("OnShow", function()
     BuildFishList()
     RefreshFishColors()
+    UpdateFilterLabel()
 end)
 
--- Search box --------------------------------------------------------------------------
--- Search box with styling and clear button
-local searchContainer = CreateFrame("Frame", nil, catPane)
-searchContainer:SetPoint("TOPLEFT", catPane, "TOPLEFT", 0, 0)
-searchContainer:SetSize(LIST_W - 16, 28)
-
-local searchBox = CreateFrame("EditBox", nil, searchContainer, "InputBoxTemplate")
-searchBox:SetPoint("TOPLEFT", searchContainer, "TOPLEFT", 4, -2)
-searchBox:SetSize(LIST_W - 40, 20)
-searchBox:SetAutoFocus(false)
-searchBox:SetText("")
-
--- Clear button
-local clearBtn = CreateFrame("Button", nil, searchContainer)
-clearBtn:SetSize(20, 20)
-clearBtn:SetPoint("RIGHT", searchContainer, "RIGHT", -2, 0)
-local clearTex = clearBtn:CreateTexture(nil, "ARTWORK")
-clearTex:SetTexture("Interface\\Icons\\INV_MISC_QUESTIONMARK")
-clearTex:SetAllPoints()
-clearBtn:SetScript("OnClick", function()
-    searchBox:SetText("")
-    searchBox:ClearFocus()
-end)
-clearBtn:SetScript("OnEnter", function()
-    GameTooltip:SetOwner(clearBtn, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Clear search", 1, 1, 1)
-    GameTooltip:Show()
-end)
-clearBtn:SetScript("OnLeave", GameTooltip_Hide)
-
--- Enhanced search with highlighting
-searchBox:SetScript("OnTextChanged", function(self)
-    local query = self:GetText():lower()
+-- ── Search OnTextChanged ─────────────────────────────────────
+searchBox:HookScript("OnTextChanged", function(self)
+    local query    = self:GetText():lower()
     local visibleY = 0
-    
+
     for _, btn in ipairs(fishButtons) do
         local fishName = btn._name
-        local match = query == "" or fishName:lower():find(query, 1, true)
+        local match    = query == "" or fishName:lower():find(query, 1, true)
         btn:SetShown(match)
-        
+
         if match then
             btn:SetPoint("TOPLEFT", leftList, "TOPLEFT", 2, -visibleY)
-            
-            -- Highlight matching text
+
             if query ~= "" then
-                local lowerName = fishName:lower()
-                local start, end_ = lowerName:find(query, 1, true)
-                if start then
-                    local before = fishName:sub(1, start - 1)
-                    local matched = fishName:sub(start, end_)
-                    local after = fishName:sub(end_ + 1)
-                    btn._lbl:SetText(before .. "|cFFFFD700" .. matched .. "|r" .. after)
+                local lower = fishName:lower()
+                local s, e  = lower:find(query, 1, true)
+                if s then
+                    btn._lbl:SetText(
+                        fishName:sub(1, s - 1)
+                        .. "|cFFFFD700" .. fishName:sub(s, e) .. "|r"
+                        .. fishName:sub(e + 1))
                 else
                     btn._lbl:SetText(fishName)
                 end
             else
                 btn._lbl:SetText(fishName)
             end
-            
+
             visibleY = visibleY + ROW_H
         end
     end
-    
+
     leftList:SetHeight(math.max(visibleY, 1))
 end)
-
--- Adjust leftScroll to account for search box
-leftScroll:SetPoint("TOPLEFT", searchContainer, "BOTTOMLEFT", 0, -4)
 
 -- ============================================================
 -- TAB 2: SETTINGS
 -- ============================================================
-local ROW_H_S = 26
-local SETTINGS_DIVIDER = 350  -- x position of divider
-
-local settingsLbl = settingsPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-settingsLbl:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", 8, -8)
-settingsLbl:SetText("Show pool tooltip for expansion:")
-settingsLbl:SetTextColor(0.7, 0.7, 0.7)
-
-local settingsCBs = {}
-for i, exp in ipairs(Poolepedia_EXPANSIONS) do
-    local cb = CreateFrame("CheckButton", "PoolepediaCatCB" .. i, settingsPane, "UICheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", 8, -24 - (i * ROW_H_S))
-    cb:SetScript("OnClick", function(self)
-        if PoolepediaSettings then
-            PoolepediaSettings[exp] = self:GetChecked()
-        end
-        -- if Poolepedia_RefreshMapPanel then Poolepedia_RefreshMapPanel() end -- TODO REMOVE
-        if Poolepedia_RefreshCatalogueList then Poolepedia_RefreshCatalogueList() end
-    end)
-    cb.text:SetText(exp)
-    settingsCBs[exp] = cb
-end
-
-local divider = settingsPane:CreateTexture(nil, "ARTWORK")
-divider:SetTexture("Interface\\Buttons\\WHITE8X8")
-divider:SetVertexColor(0.25, 0.25, 0.25, 1)
-divider:SetWidth(1)
-divider:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", SETTINGS_DIVIDER, 0)
-divider:SetPoint("BOTTOMLEFT", settingsPane, "BOTTOMLEFT", SETTINGS_DIVIDER, 0)
-
--- Minimap button toggle
 local minimapLbl = settingsPane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-minimapLbl:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", SETTINGS_DIVIDER + 16, -8)
+minimapLbl:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", 8, -8)
 minimapLbl:SetText("UI Settings:")
 minimapLbl:SetTextColor(0.7, 0.7, 0.7)
 
 local minimapCB = CreateFrame("CheckButton", "PoolepediaCatMinimapCB", settingsPane, "UICheckButtonTemplate")
-minimapCB:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", SETTINGS_DIVIDER + 16, -28)
+minimapCB:SetPoint("TOPLEFT", settingsPane, "TOPLEFT", 8, -28)
 minimapCB:SetScript("OnClick", function(self)
     if PoolepediaSettings then
         PoolepediaSettings.hideMinimapButton = not self:GetChecked()
@@ -633,16 +814,11 @@ end)
 minimapCB.text:SetText("Show minimap button")
 
 settingsPane:SetScript("OnShow", function()
-    -- Minimap button checkbox
     minimapCB:SetChecked(not (PoolepediaSettings and PoolepediaSettings.hideMinimapButton))
-    -- Expansion checkboxes
-    for exp, cb in pairs(settingsCBs) do
-        cb:SetChecked(PoolepediaSettings == nil or PoolepediaSettings[exp] ~= false)
-    end
 end)
 
 -- ============================================================
--- Slash Command  /pld  – toggles the settings panel
+-- Slash Command  /pld  – toggles the catalogue panel
 -- ============================================================
 SLASH_POOLEPEDIA1 = "/pld"
 SlashCmdList["POOLEPEDIA"] = function()

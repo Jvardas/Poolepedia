@@ -11,3 +11,6 @@ desktop.ini
 
 # Fetched external libs — don't commit these
 /libs/
+
+.claude/
+CLAUDE.md
