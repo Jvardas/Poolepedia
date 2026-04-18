@@ -9,6 +9,7 @@ local FRAME_H  = 720
 local LIST_W   = 210
 local ROW_H    = 22
 local HEADER_H = 44   -- top strip height (title + tabs)
+local EXP_H    = 24   -- expansion group header height
 
 -- ============================================================
 -- Main frame  – plain dark panel, no WoW chrome
@@ -65,6 +66,19 @@ titleText:SetTextColor(0.9, 0.85, 0.65, 1)  -- warm gold
 local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
 closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 2, 2)
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
+
+-- Version label (below close button)
+local version = C_AddOns.GetAddOnMetadata("Poolepedia", "Version") or "dev"
+local versionText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+versionText:SetPoint("TOPRIGHT", closeBtn, "BOTTOMRIGHT", -4, -2)
+versionText:SetText("v" .. version)
+versionText:SetTextColor(0.5, 0.5, 0.5, 1)
+
+-- Minimap restore hint (bottom-left of header)
+local minimapHint = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+minimapHint:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 16, 5)
+minimapHint:SetText("/pld minimap  ·  restore minimap button")
+minimapHint:SetTextColor(0.38, 0.38, 0.38, 1)
 
 -- ============================================================
 -- ── Panes (content area below header) ───────────────────────
@@ -510,9 +524,161 @@ Poolepedia_RefreshLiveStats = function()
     if Poolepedia_RefreshCatalogueList then Poolepedia_RefreshCatalogueList() end
 end
 
--- ── Fish list buttons ────────────────────────────────────────
-local fishButtons = {}
-local activeBtn   = nil
+-- ── Fish list – expansion accordion ─────────────────────────
+-- expGroups[expName] = { hdr=frame, arrow=tex, fish={btn,...}, expanded=bool }
+local expGroups    = {}
+local fishButtons  = {}   -- flat list, kept for catch refresh
+local activeBtn    = nil
+
+-- Favorites header (built once, always at top)
+local favHdr      = nil
+local favArrow    = nil
+local favExpanded = true
+
+local function GetFishExpansion(name)
+    return PoolepediaDB and PoolepediaDB._fishExp and PoolepediaDB._fishExp[name]
+end
+
+-- Repositions all visible headers + fish buttons in one pass.
+-- query: current search string (lowercase). Passing nil reads searchBox.
+local function RelayoutList(query)
+    if query == nil then
+        query = searchBox and searchBox:GetText():lower() or ""
+    end
+    local searching = query ~= ""
+    local y = 0
+    local positioned = {}  -- buttons already placed in Favorites, skip in expansion groups
+
+    -- ── Favorites section (hidden while searching) ───────────
+    if favHdr then
+        if searching then
+            favHdr:Hide()
+        else
+            local favFish = {}
+            for _, btn in ipairs(fishButtons) do
+                if btn._fav then favFish[#favFish + 1] = btn end
+            end
+
+            if #favFish == 0 then
+                favHdr:Hide()
+                for _, btn in ipairs(fishButtons) do
+                    if btn._fav then btn:Hide() end
+                end
+            else
+                favHdr:ClearAllPoints()
+                favHdr:SetPoint("TOPLEFT",  leftList, "TOPLEFT",  0, -y)
+                favHdr:SetPoint("TOPRIGHT", leftList, "TOPRIGHT", 0, -y)
+                favHdr:Show()
+                y = y + EXP_H
+                if favArrow then
+                    favArrow:SetTexture(favExpanded
+                        and "Interface\\Buttons\\UI-MinusButton-Up"
+                        or  "Interface\\Buttons\\UI-PlusButton-Up")
+                end
+
+                for _, btn in ipairs(favFish) do
+                    if favExpanded then
+                        btn:ClearAllPoints()
+                        btn:SetPoint("TOPLEFT",  leftList, "TOPLEFT",   8, -y)
+                        btn:SetPoint("TOPRIGHT", leftList, "TOPRIGHT", -2, -y)
+                        btn:Show()
+                        y = y + ROW_H
+                    else
+                        btn:Hide()
+                    end
+                    positioned[btn] = true
+                end
+            end
+        end
+    end
+
+    -- ── Expansion groups (+ Unknown catch-all at end) ────────
+    local renderOrder = {}
+    for _, exp in ipairs(Poolepedia_EXPANSIONS) do renderOrder[#renderOrder + 1] = exp end
+    renderOrder[#renderOrder + 1] = "Unknown"
+
+    for _, exp in ipairs(renderOrder) do
+        local g = expGroups[exp]
+        if g then
+            local expEnabled = not PoolepediaSettings or PoolepediaSettings[exp] ~= false
+
+            local visible = {}
+            for _, btn in ipairs(g.fish) do
+                if not positioned[btn] then
+                    local nameMatch = not searching or btn._name:lower():find(query, 1, true)
+                    if nameMatch and (expEnabled or searching) then
+                        visible[#visible + 1] = btn
+                    end
+                end
+            end
+
+            if #visible == 0 then
+                g.hdr:Hide()
+                for _, btn in ipairs(g.fish) do
+                    if not positioned[btn] then btn:Hide() end
+                end
+            else
+                g.hdr:ClearAllPoints()
+                g.hdr:SetPoint("TOPLEFT",  leftList, "TOPLEFT",  0, -y)
+                g.hdr:SetPoint("TOPRIGHT", leftList, "TOPRIGHT", 0, -y)
+                g.hdr:Show()
+                y = y + EXP_H
+
+                local showFish = g.expanded or searching
+                g.arrow:SetTexture(showFish
+                    and "Interface\\Buttons\\UI-MinusButton-Up"
+                    or  "Interface\\Buttons\\UI-PlusButton-Up")
+
+                for _, btn in ipairs(g.fish) do
+                    if positioned[btn] then
+                        -- already shown in Favorites; don't move or hide it
+                    else
+                        local nameMatch = not searching or btn._name:lower():find(query, 1, true)
+                        if showFish and nameMatch and (expEnabled or searching) then
+                            btn:ClearAllPoints()
+                            btn:SetPoint("TOPLEFT",  leftList, "TOPLEFT",   8, -y)
+                            btn:SetPoint("TOPRIGHT", leftList, "TOPRIGHT", -2, -y)
+                            btn:Show()
+                            y = y + ROW_H
+                        else
+                            btn:Hide()
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    leftList:SetHeight(math.max(y, 1))
+end
+
+local function ApplyButtonStyle(btn)
+    -- Re-evaluate caught status
+    if not btn._caught and PoolepediaFishIndex and PoolepediaFishIndex[btn._name] then
+        for _, e in ipairs(PoolepediaFishIndex[btn._name]) do
+            local key = e.zoneID .. "/" .. e.poolName
+            if PoolepediaCatches and PoolepediaCatches[key]
+                and next(PoolepediaCatches[key]) then
+                btn._caught = true
+                break
+            end
+        end
+    end
+
+    if btn == activeBtn then
+        btn._bg:SetVertexColor(0.2, 0.55, 1, 0.30)
+        btn._lbl:SetTextColor(1, 1, 1)
+        if btn._icon then btn._icon:SetAlpha(1) end
+    elseif btn._caught then
+        btn._bg:SetVertexColor(1, 0.82, 0, 0.18)
+        btn._lbl:SetTextColor(1, 0.85, 0.1)
+        if btn._icon then btn._icon:SetAlpha(1) end
+    else
+        btn._bg:SetVertexColor(1, 1, 1, 0)
+        btn._lbl:SetTextColor(1, 1, 1)
+        if btn._icon then btn._icon:SetAlpha(1) end
+    end
+end
 
 local function DeactivateAll()
     for _, b in ipairs(fishButtons) do
@@ -527,52 +693,9 @@ end
 
 local function RefreshFishColors()
     for _, btn in ipairs(fishButtons) do
-        local entries = PoolepediaFishIndex and PoolepediaFishIndex[btn._name]
-        local enabled = false
-        if entries then
-            for _, e in ipairs(entries) do
-                local pd  = PoolepediaDB and PoolepediaDB._byName[e.poolName]
-                local exp = pd and pd.expansion
-                -- no expansion data, or the expansion is enabled → show
-                if not exp or not PoolepediaSettings or PoolepediaSettings[exp] ~= false then
-                    enabled = true
-                    break
-                end
-            end
-        else
-            enabled = true  -- unknown fish, show by default
-        end
-
-        -- Re-evaluate caught status (catches may arrive after build)
-        if not btn._caught and PoolepediaFishIndex and PoolepediaFishIndex[btn._name] then
-            for _, e in ipairs(PoolepediaFishIndex[btn._name]) do
-                local key = e.zoneID .. "/" .. e.poolName
-                if PoolepediaCatches and PoolepediaCatches[key]
-                    and next(PoolepediaCatches[key]) then
-                    btn._caught = true
-                    break
-                end
-            end
-        end
-
-        if btn == activeBtn then
-            btn._bg:SetVertexColor(0.2, 0.55, 1, 0.30)
-            btn._lbl:SetTextColor(1, 1, 1)
-            if btn._icon then btn._icon:SetAlpha(1) end
-        elseif not enabled then
-            btn._bg:SetVertexColor(1, 1, 1, 0)
-            btn._lbl:SetTextColor(0.38, 0.38, 0.38)
-            if btn._icon then btn._icon:SetAlpha(0.38) end
-        elseif btn._caught then
-            btn._bg:SetVertexColor(1, 0.82, 0, 0.18)   -- gold background tint
-            btn._lbl:SetTextColor(1, 0.85, 0.1)        -- gold text
-            if btn._icon then btn._icon:SetAlpha(1) end
-        else
-            btn._bg:SetVertexColor(1, 1, 1, 0)
-            btn._lbl:SetTextColor(1, 1, 1)
-            if btn._icon then btn._icon:SetAlpha(1) end
-        end
+        ApplyButtonStyle(btn)
     end
+    RelayoutList()
 end
 Poolepedia_RefreshCatalogueList = RefreshFishColors
 
@@ -581,87 +704,203 @@ local function BuildFishList()
     if fishListBuilt then return end
     if not PoolepediaFishIndex then return end
 
+    -- Bucket fish by expansion (preserving Poolepedia_EXPANSIONS order)
+    local byExp = {}
+    for _, exp in ipairs(Poolepedia_EXPANSIONS) do byExp[exp] = {} end
+    byExp["Unknown"] = {}
+
     local names = {}
     for n in pairs(PoolepediaFishIndex) do names[#names + 1] = n end
     table.sort(names)
 
-    local y = 0
     for _, name in ipairs(names) do
-        local btn = CreateFrame("Button", nil, leftList)
-        btn:SetHeight(ROW_H)
-        btn:SetPoint("TOPLEFT",  leftList, "TOPLEFT",   2, -y)
-        btn:SetPoint("TOPRIGHT", leftList, "TOPRIGHT", -2, -y)
-
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetTexture("Interface\\Buttons\\WHITE8X8")
-        bg:SetVertexColor(1, 1, 1, 0)
-
-        local iconTex = btn:CreateTexture(nil, "ARTWORK")
-        iconTex:SetSize(16, 16)
-        iconTex:SetPoint("LEFT", btn, "LEFT", 4, 0)
-        local _, _, _, _, _, _, _, _, _, tex = C_Item.GetItemInfo(name)
-        if tex then
-            iconTex:SetTexture(tex)
-        else
-            iconTex:SetTexture("Interface\\Icons\\INV_MISC_QUESTIONMARK")
-        end
-
-        local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        lbl:SetPoint("LEFT",  btn, "LEFT",   24, 0)
-        lbl:SetPoint("RIGHT", btn, "RIGHT",  -2, 0)
-        lbl:SetJustifyH("LEFT")
-        lbl:SetText(name)
-
-        -- Check if this fish has any recorded catches (has real icon data)
-        local hasCatch = tex ~= nil
-        if not hasCatch and PoolepediaFishIndex and PoolepediaFishIndex[name] then
-            for _, e in ipairs(PoolepediaFishIndex[name]) do
-                local key = e.zoneID .. "/" .. e.poolName
-                if PoolepediaCatches and PoolepediaCatches[key]
-                    and next(PoolepediaCatches[key]) then
-                    hasCatch = true
-                    break
-                end
-            end
-        end
-
-        btn._name    = name
-        btn._bg      = bg
-        btn._lbl     = lbl
-        btn._icon    = iconTex
-        btn._caught  = hasCatch
-
-        btn:SetScript("OnEnter", function(self)
-            if self ~= activeBtn then
-                if self._caught then
-                    bg:SetVertexColor(1, 0.82, 0, 0.30)
-                else
-                    bg:SetVertexColor(1, 1, 1, 0.08)
-                end
-            end
-        end)
-        btn:SetScript("OnLeave", function(self)
-            if self ~= activeBtn then
-                if self._caught then
-                    bg:SetVertexColor(1, 0.82, 0, 0.18)
-                else
-                    bg:SetVertexColor(1, 1, 1, 0)
-                end
-            end
-        end)
-        btn:SetScript("OnClick", function(self)
-            DeactivateAll()
-            activeBtn = self
-            bg:SetVertexColor(0.2, 0.55, 1, 0.30)
-            ShowFishZones(name)
-        end)
-
-        fishButtons[#fishButtons + 1] = btn
-        y = y + ROW_H
+        local exp = GetFishExpansion(name) or "Unknown"
+        if not byExp[exp] then byExp[exp] = {} end
+        byExp[exp][#byExp[exp] + 1] = name
     end
-    leftList:SetHeight(math.max(y, 1))
+
+    -- ── Favorites header (created once, always pinned to top) ──
+    favHdr = CreateFrame("Frame", nil, leftList)
+    favHdr:SetHeight(EXP_H)
+
+    local favBg = favHdr:CreateTexture(nil, "BACKGROUND")
+    favBg:SetAllPoints()
+    favBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    favBg:SetVertexColor(0.14, 0.11, 0.04, 0.95)
+
+    favArrow = favHdr:CreateTexture(nil, "OVERLAY")
+    favArrow:SetSize(12, 12)
+    favArrow:SetPoint("LEFT", favHdr, "LEFT", 4, 0)
+    favArrow:SetTexture("Interface\\Buttons\\UI-MinusButton-Up")
+
+    local favStar = favHdr:CreateTexture(nil, "OVERLAY")
+    favStar:SetSize(12, 12)
+    favStar:SetPoint("LEFT", favHdr, "LEFT", 20, 0)
+    favStar:SetAtlas("auctionhouse-icon-favorite")
+
+    local favLbl = favHdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    favLbl:SetPoint("LEFT",  favHdr, "LEFT",  36, 0)
+    favLbl:SetPoint("RIGHT", favHdr, "RIGHT", -4, 0)
+    favLbl:SetJustifyH("LEFT")
+    favLbl:SetText("Favorites")
+    favLbl:SetTextColor(1, 0.82, 0.0)
+
+    favHdr:EnableMouse(true)
+    favHdr:SetScript("OnEnter", function() favBg:SetVertexColor(0.20, 0.16, 0.06, 0.95) end)
+    favHdr:SetScript("OnLeave", function() favBg:SetVertexColor(0.14, 0.11, 0.04, 0.95) end)
+    favHdr:SetScript("OnMouseDown", function(_, mb)
+        if mb ~= "LeftButton" then return end
+        favExpanded = not favExpanded
+        RelayoutList()
+    end)
+    favHdr:Hide()
+
+    -- Build expansion headers + fish buttons (including Unknown at end)
+    local buildOrder = {}
+    for _, exp in ipairs(Poolepedia_EXPANSIONS) do buildOrder[#buildOrder + 1] = exp end
+    buildOrder[#buildOrder + 1] = "Unknown"
+
+    for _, exp in ipairs(buildOrder) do
+        local fishInExp = byExp[exp]
+        if fishInExp and #fishInExp > 0 then
+
+        -- Expansion header frame
+        local hdr = CreateFrame("Frame", nil, leftList)
+        hdr:SetHeight(EXP_H)
+
+        local hdrBg = hdr:CreateTexture(nil, "BACKGROUND")
+        hdrBg:SetAllPoints()
+        hdrBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+        hdrBg:SetVertexColor(0.10, 0.10, 0.10, 0.95)
+
+        local arrow = hdr:CreateTexture(nil, "OVERLAY")
+        arrow:SetSize(12, 12)
+        arrow:SetPoint("LEFT", hdr, "LEFT", 4, 0)
+        arrow:SetTexture("Interface\\Buttons\\UI-MinusButton-Up")
+
+        local expLbl = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        expLbl:SetPoint("LEFT",  hdr, "LEFT",  20, 0)
+        expLbl:SetPoint("RIGHT", hdr, "RIGHT", -4, 0)
+        expLbl:SetJustifyH("LEFT")
+        expLbl:SetText(exp)
+        expLbl:SetTextColor(0.80, 0.75, 0.50)
+
+        local g = { hdr = hdr, arrow = arrow, fish = {}, expanded = true }
+        expGroups[exp] = g
+
+        hdr:EnableMouse(true)
+        hdr:SetScript("OnEnter", function() hdrBg:SetVertexColor(0.16, 0.16, 0.16, 0.95) end)
+        hdr:SetScript("OnLeave", function() hdrBg:SetVertexColor(0.10, 0.10, 0.10, 0.95) end)
+        hdr:SetScript("OnMouseDown", function(_, mb)
+            if mb ~= "LeftButton" then return end
+            g.expanded = not g.expanded
+            RelayoutList()
+        end)
+
+        -- Fish buttons for this expansion
+        for _, name in ipairs(fishInExp) do
+            local btn = CreateFrame("Button", nil, leftList)
+            btn:SetHeight(ROW_H)
+
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+            bg:SetVertexColor(1, 1, 1, 0)
+
+            local iconTex = btn:CreateTexture(nil, "ARTWORK")
+            iconTex:SetSize(16, 16)
+            iconTex:SetPoint("LEFT", btn, "LEFT", 4, 0)
+            local _, _, _, _, _, _, _, _, _, tex = C_Item.GetItemInfo(name)
+            if tex then
+                iconTex:SetTexture(tex)
+            else
+                iconTex:SetTexture("Interface\\Icons\\INV_MISC_QUESTIONMARK")
+            end
+
+            local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            lbl:SetPoint("LEFT",  btn, "LEFT",   24, 0)
+            lbl:SetPoint("RIGHT", btn, "RIGHT",  -20, 0)
+            lbl:SetJustifyH("LEFT")
+            lbl:SetText(name)
+
+            -- Star (favorite) button
+            local starBtn = CreateFrame("Button", nil, btn)
+            starBtn:SetSize(16, 16)
+            starBtn:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
+            starBtn:EnableMouse(true)
+
+            local starTex = starBtn:CreateTexture(nil, "ARTWORK")
+            starTex:SetAllPoints()
+            local isFav = PoolepediaSettings and PoolepediaSettings.favorites
+                          and PoolepediaSettings.favorites[name] or false
+            starTex:SetAtlas(isFav and "auctionhouse-icon-favorite" or "auctionhouse-icon-favorite-off")
+
+            starBtn:SetScript("OnClick", function(_)
+                btn._fav = not btn._fav
+                if not PoolepediaSettings then PoolepediaSettings = {} end
+                if not PoolepediaSettings.favorites then PoolepediaSettings.favorites = {} end
+                if btn._fav then
+                    PoolepediaSettings.favorites[name] = true
+                    starTex:SetAtlas("auctionhouse-icon-favorite")
+                else
+                    PoolepediaSettings.favorites[name] = nil
+                    starTex:SetAtlas("auctionhouse-icon-favorite-off")
+                end
+                RelayoutList()
+            end)
+
+            local hasCatch = tex ~= nil
+            if not hasCatch and PoolepediaFishIndex[name] then
+                for _, e in ipairs(PoolepediaFishIndex[name]) do
+                    local key = e.zoneID .. "/" .. e.poolName
+                    if PoolepediaCatches and PoolepediaCatches[key]
+                        and next(PoolepediaCatches[key]) then
+                        hasCatch = true
+                        break
+                    end
+                end
+            end
+
+            btn._name   = name
+            btn._bg     = bg
+            btn._lbl    = lbl
+            btn._icon   = iconTex
+            btn._caught = hasCatch
+            btn._fav    = isFav
+
+            btn:SetScript("OnEnter", function(self)
+                if self ~= activeBtn then
+                    bg:SetVertexColor(self._caught and 1 or 1,
+                                      self._caught and 0.82 or 1,
+                                      self._caught and 0 or 1,
+                                      self._caught and 0.30 or 0.08)
+                end
+            end)
+            btn:SetScript("OnLeave", function(self)
+                if self ~= activeBtn then
+                    if self._caught then
+                        bg:SetVertexColor(1, 0.82, 0, 0.18)
+                    else
+                        bg:SetVertexColor(1, 1, 1, 0)
+                    end
+                end
+            end)
+            btn:SetScript("OnClick", function(self)
+                DeactivateAll()
+                activeBtn = self
+                bg:SetVertexColor(0.2, 0.55, 1, 0.30)
+                ShowFishZones(name)
+            end)
+
+            g.fish[#g.fish + 1] = btn
+            fishButtons[#fishButtons + 1] = btn
+        end
+
+        end -- if fishInExp and #fishInExp > 0
+    end
+
     fishListBuilt = true
+    RelayoutList()
 end
 
 local iconFillFrame = CreateFrame("Frame")
@@ -669,7 +908,7 @@ iconFillFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 iconFillFrame:SetScript("OnEvent", function(_, _, _, success)
     if not success or not fishListBuilt then return end
     for _, btn in ipairs(fishButtons) do
-        if not btn._icon then
+        if btn._icon then
             local _, _, _, _, _, _, _, _, _, tex = C_Item.GetItemInfo(btn._name)
             if tex then btn._icon:SetTexture(tex) end
         end
@@ -684,42 +923,32 @@ end)
 
 -- ── Search OnTextChanged ─────────────────────────────────────
 searchBox:HookScript("OnTextChanged", function(self)
-    local query    = self:GetText():lower()
-    local visibleY = 0
+    local query = self:GetText():lower()
 
+    -- Update highlight text on buttons
     for _, btn in ipairs(fishButtons) do
-        local fishName = btn._name
-        local match    = query == "" or fishName:lower():find(query, 1, true)
-        btn:SetShown(match)
-
-        if match then
-            btn:SetPoint("TOPLEFT", leftList, "TOPLEFT", 2, -visibleY)
-
-            if query ~= "" then
-                local lower = fishName:lower()
-                local s, e  = lower:find(query, 1, true)
-                if s then
-                    btn._lbl:SetText(
-                        fishName:sub(1, s - 1)
-                        .. "|cFFFFD700" .. fishName:sub(s, e) .. "|r"
-                        .. fishName:sub(e + 1))
-                else
-                    btn._lbl:SetText(fishName)
-                end
+        if query ~= "" then
+            local lower = btn._name:lower()
+            local s, e  = lower:find(query, 1, true)
+            if s then
+                btn._lbl:SetText(
+                    btn._name:sub(1, s - 1)
+                    .. "|cFFFFD700" .. btn._name:sub(s, e) .. "|r"
+                    .. btn._name:sub(e + 1))
             else
-                btn._lbl:SetText(fishName)
+                btn._lbl:SetText(btn._name)
             end
-
-            visibleY = visibleY + ROW_H
+        else
+            btn._lbl:SetText(btn._name)
         end
     end
 
-    leftList:SetHeight(math.max(visibleY, 1))
+    RelayoutList(query)
 end)
 
 -- ============================================================
 -- Slash Command  /pld  – toggles the catalogue panel
---                        /pld minimap – re-shows the minimap button
+-- /pld minimap – re-shows the minimap button
 -- ============================================================
 SLASH_POOLEPEDIA1 = "/pld"
 SlashCmdList["POOLEPEDIA"] = function(msg)

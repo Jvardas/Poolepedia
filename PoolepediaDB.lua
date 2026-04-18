@@ -13,6 +13,7 @@
 
 PoolepediaDB = {}
 PoolepediaDB._byName = {}   -- flat name→data index used as zone-agnostic fallback
+PoolepediaDB._fishExp = {}  -- fish name → earliest expansion (first write wins; survives pool-name collisions)
 
 -- Registers a block of pools under a given expansion name.
 -- Each entry is tagged with its expansion and also indexed in
@@ -23,6 +24,13 @@ local function addPools(expansion, pools)
         data.expansion = expansion
         PoolepediaDB[name]         = data
         PoolepediaDB._byName[name] = data
+        if data.fish then
+            for _, fishName in ipairs(data.fish) do
+                if not PoolepediaDB._fishExp[fishName] then
+                    PoolepediaDB._fishExp[fishName] = expansion
+                end
+            end
+        end
     end
 end
 
@@ -38,6 +46,9 @@ addPools("Classic", {
     ["Greater Sagefish School"]  = { fish = { "Raw Greater Sagefish" } },
     ["Floating Wreckage"]        = { fish = { "Oily Blackmouth", "Firefin Snapper", "Stonescale Eel" },
                                      notes = "Mostly salvage with occasional fish" },
+    ["Mixed Ocean School"]       = { fish = { "Firefin Snapper", "Oily Blackmouth" } },
+    ["Open-Water"] = { fish = { "Raw Brilliant Smallfish", "Raw Longjaw Mud Snapper", "Raw Slitherskin Mackerel",
+        "Sickly Looking Fish", "Raw Bristle Whisker Catfish", "Raw Mithril Head Trout", "Raw Glossy Mightfish"}}
 })
 
 -- -------------------------------------------------------
@@ -162,16 +173,43 @@ addPools("Dragonflight", {
 })
 
 -- -------------------------------------------------------
--- The War Within  (verify pool names in-game)
+-- The War Within
 -- -------------------------------------------------------
 addPools("The War Within", {
-    ["Grongol Lurker School"]   = { fish = { "Grongol Lurker" } },
-    ["Deepgrotto Trout School"] = { fish = { "Deepgrotto Trout" } },
-    ["Gloomfish School"]        = { fish = { "Gloomfish" } },
+    ["Glimmerpool"] = { fish = { "Bismuth Bitterling", "Crystalline Sturgeon", "Goldengill Trout", "Specular Rainbowfish", "Spiked Sea Raven", "Cursed Ghoulfish" } },
+    ["Blood in the Water"] = { fish = { "Bloody Perch", "Dilly-Dally Dace", "Arathor Hammerfish", "Kaheti Slum Shark", "Sanguine Dogfish", "Cursed Ghoulfish" },
+        notes = "Use Bloody Perch Bloody Perch to gain up to 10 stacks of Bloody Chum, which increases the chances of catching Sanguine Dogfish Sanguine Dogfish." },
+    ["Bloody Perch Swarm"] = { fish = { "Bloody Perch", "Sanguine Dogfish", "Cursed Ghoulfish" } },
+    ["Calm Surfacing Ripple"] = { fish = { "Bloody Perch", "Dilly-Dally Dace", "Dornish Pike", "Nibbling Minnow", "Quiet River Bass", "Spiked Sea Raven", "Cursed Ghoulfish" } },
+    ["Festering Rotpool"] = { fish = { "Bloody Perch", "Dilly-Dally Dace", "Goldengill Trout", "Pale Huskfish", "Cursed Ghoulfish" } },
+    ["Swarm of Slum Sharks"] = { fish = { "Bloody Perch", "Kaheti Slum Shark", "Cursed Ghoulfish" } },
+    ["Infused Ichor Spill"] = { fish = { "Goldengill Trout", "Pale Huskfish", "Cursed Ghoulfish" } },
+    ["River Bass Pool"] = { fish = { "Quiet River Bass", "Cursed Ghoulfish" } },
+    ["Anglerseeker Torrent"] = { fish = { "Roaring Anglerseeker", "Spiked Sea Raven", "Cursed Ghoulfish" } },
+    ["Stargazer Swarm"] = { fish = { "Whispering Stargazer", "Spiked Sea Raven", "Cursed Ghoulfish" } },
+    ["Steamwheedle Runoff"] = { fish = { "\"Gold\" Fish" } },
+    ["Royal Ripple"] = { fish = { "Queen's Lurefish", "Regal Dottyback" }, notes = "Use Regal Dottyback Regal Dottyback to attract this fish in open water." },
 })
 
 -- -------------------------------------------------------
--- Midnight  (add entries here when expansion launches)
+-- Midnight
 -- -------------------------------------------------------
--- addPools("Midnight", {
--- })
+addPools("Midnight", {
+    ["Bloom Swarm"] = { fish = { "Eversong Trout", "Restored Songfish", "Shimmer Spinefish", "Shimmersiren" }, 
+        notes = "Bloom Swarms are short-lived, usually only good for 1 cast. However, they yield only Uncommon and Rare fish." },
+    ["Bubbling Bloom"] = { fish = { "Eversong Trout", "Restored Songfish", "Shimmer Spinefish", "Arcane Wyrmfish", "Lynxfish", "Sin'dorei Swarmer" } },
+    ["Sunwell Swarm"] = { fish = { "Arcane Wyrmfish", "Eversong Trout", "Lynxfish", "Restored Songfish", " Sin'dorei Swarmer", "Sunwell Fish" } },
+    ["Hunter Surge"] = { fish = { "Blood Hunter", "Gore Guppy" }},
+    ["Obscured School"] = { fish = { "Fungalskin Pike", "Lucky Loa", "Root Crab", "Twisted Tetra" }},
+    ["Surface Ripple"] = { fish = { "Blood Hunter", "Fungalskin Pike", "Gore Guppy", "Lucky Loa", "Lynxfish", "Root Crab", "Shimmer Spinefish", "Sin'dorei Swarmer" }},
+    ["Blossoming Torrent"] = { fish = { "Arcane Wyrmfish", "Restored Songfish", "Shimmer Spinefish", "Sunwell Fish", "Tender Lumifin" }},
+    ["Lashing Waves"] = { fish ={ "Bloomtail Minnow", "Fungalskin Pike", "Twisted Tetra" }},
+    ["Oceanic Vortex"] = { fish = { "Blood Hunter", "Hollow Grouper", "Null Voidfish", "Ominous Octopus", "Shimmersiren", "Warping Wise" }, 
+        notes = "Oceanic Vortexes are extremely rare fishing nodes in Voidstorm. 300 Fishing alone isn't enough; it may require high Perception to see them consistently. All fish you can fish for in Oceanic Vortexes are also available in the easier-to-find Viscous Void pools."},
+    ["Careless Cargo"] = { fish = { "Treasure" }, notes = "Primary source for Fishing Lure recipes, Recipe: Amani Angler's Ward Recipe: Amani Angler's Ward, component items used to create Midnight Angler's Grand Line, as well as Motes and other treasures." },
+    ["Lost Treasures"] = { fish = { "Treasure" }, notes = "Rare node; little information has been collected. Mostly seems to yield normal fish at lower levels. May require high Perception/fishing skill to get actual treasures. Usually a one-and-done node." },
+    ["Viscous Void"] = { fish = { "Blood Hunter", "Hollow Grouper", "Null Voidfish", "Ominous Octopus", "Shimmersiren", "Warping Wise" }, 
+        notes = "Consistent (and much safer) place to fish for species native to Voidstorm. Any fish you can get from an Oceanic Vortex, you can also get from a Viscous Void pool. The only drawback is high competition." },
+    ["Open-Water"] = { fish = { "Blood Hunter", "Eversong Trout", "Fungalskin Pike", "Gore Guppy", "Lynxfish", "Restored Songfish", "Shimmer Spinefish", "Sin'dorei Swarmer", "Shimmersiren", 
+        "Arcane Wyrmfish", "Sunwell Fish", "Lucky Loa", "Root Crab", "Twisted Tetra", "Tender Lumifin", "Bloomtail Minnow", "Hollow Grouper", "Null Voidfish", "Ominous Octopus", "Warping Wise",  } }
+})

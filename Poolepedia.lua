@@ -79,6 +79,9 @@ eventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         if PoolepediaSettings.minimapAngle == nil then
             PoolepediaSettings.minimapAngle = 225
         end
+        if type(PoolepediaSettings.favorites) ~= "table" then
+            PoolepediaSettings.favorites = {}
+        end
     end
 
     if type(PoolepediaCatches) ~= "table" then
